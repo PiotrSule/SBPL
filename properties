@@ -9,15 +9,11 @@ library(PSDistr)
 library(Deriv) 
 library(splines)
 
-#normalization condition
-norm_cond<-function(a,b) {
-  esgn1 <- function(x) dSBPL(x,a,b)
-  return (as.numeric(integrate(Vectorize(esgn1), lower = -Inf, upper = Inf)[1]))}
-
 #PDF
 dSBPL<- function(x,a,b){
   return(a*b/2^b*abs(x)^(a-1)*exp(-abs(x)^a)*(1+sign(x)*(1-exp(-abs(x)^a)))^(b-1))
 }
+
 #CDF
 pSBPL<- function(x,a,b){
   return((0.5+0.5*sign(x)*(1-exp(-abs(x)^a)))^b)
