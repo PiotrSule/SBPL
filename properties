@@ -1,0 +1,97 @@
+library(RelDists)
+library(zipfR)
+library(pracma)
+library(flexsurv)
+library(xlsx)
+library(ggamma)
+library(gsl)
+library(PSDistr)
+library(Deriv) 
+library(splines)
+
+#normalization condition
+norm_cond<-function(a,b) {
+  esgn1 <- function(x) dSBPL(x,a,b)
+  return (as.numeric(integrate(Vectorize(esgn1), lower = -Inf, upper = Inf)[1]))}
+
+#PDF
+dSBPL<- function(x,a,b){
+  return(a*b/2^b*abs(x)^(a-1)*exp(-abs(x)^a)*(1+sign(x)*(1-exp(-abs(x)^a)))^(b-1))
+}
+#CDF
+pSBPL<- function(x,a,b){
+  return((0.5+0.5*sign(x)*(1-exp(-abs(x)^a)))^b)
+}
+
+#quantile 
+qSBPL=function(p,a,b){
+  if (p^(1/b)>0.5) qu=(-log(2-2*p^(1/b)))^(1/a)
+  if (p^(1/b)<0.5) qu=-(-log(2*p^(1/b)))^(1/a)
+  return(qu)
+}
+
+#generator
+rSBPL=function(n,a,b) {
+  x=numeric(n)
+  for (i in 1:n) {
+    R=runif(1,0,1)
+    if (R^(1/b)>0.5) x[i]=(-log(2-2*R^(1/b)))^(1/a)
+    if (R^(1/b)<0.5) x[i]=-(-log(2*R^(1/b)))^(1/a)
+  }
+  return(sort(x))
+}
+
+#ordinary moments
+mSBPL=function(k,a,b) {
+  return(integral(function(x) x^k*dSBPL(x,a,b), -100, 100, reltol = 1e-12, method = "Simpson"))
+}
+
+#skewness
+g1SBPL=function(a,b){
+  w1=mSBPL(3,a,b)-3*mSBPL(1,a,b)*mSBPL(2,a,b)+2*mSBPL(1,a,b)^3
+  w2=mSBPL(2,a,b)-mSBPL(1,a,b)^2
+  return(w1/w2^(1.5))
+}
+
+#kurtosis
+g2SBPL=function(a,b){
+  w1=mSBPL(4,a,b)-4*mSBPL(1,a,b)*mSBPL(3,a,b)+6*mSBPL(1,a,b)^2*
+    mSBPL(2,a,b)-3*mSBPL(1,a,b)^4
+  w2=mSBPL(2,a,b)-mSBPL(1,a,b)^2
+  return(w1/w2^2)
+}
+
+# PDF of order statistics
+dosSBPL=function(x,i,n,a,b) {
+  return(fact(n)/fact(i-1)/fact(n-i)*dSBPL(x,a,b)*pSBPL(x,a,b)^(i-1)
+         *(1-pSBPL(x,a,b))^(n-i))
+}
+# moments of order statistics
+mosSBPL=function(k,i,n,a,b) {
+  return(integral(function(x) x^k*dosSBPL(x,i,n,a,b), -100, 100, reltol = 1e-12, method = "Simpson"))
+}
+
+#Shannon entropy
+sSBPL=function(a,b){
+  return(integral(function(x) -dSBPL(x,a,b)*log(dSBPL(x,a,b)), -5, 5, reltol = 1e-12, method = "Simpson"))
+}
+
+I11 <- function(x, a, b){
+  eval(Deriv(Deriv(expression(log(a*b/(2^b))+(a-1)*log(abs(x))-abs(x)^a+(b-1)*log(1-exp(-abs(x)^a))+(b-1)*log(sign(x)*(1-exp(-abs(x)^a )))),'a'),'a'))
+}
+I12 <- function(x, a, b){
+  eval(Deriv(Deriv(expression(log(a*b/(2^b))+(a-1)*log(abs(x))-abs(x)^a+(b-1)*log(1-exp(-abs(x)^a))+(b-1)*log(sign(x)*(1-exp(-abs(x)^a )))),'a'),'b'))
+}
+I21 <- function(x, a, b) return(I12(x,a,b))
+I22 <- function(x, a, b){
+  eval(Deriv(Deriv(expression(log(a*b/(2^b))+(a-1)*log(abs(x))-abs(x)^a+(b-1)*log(1-exp(-abs(x)^a))+(b-1)*log(sign(x)*(1-exp(-abs(x)^a )))),'b'),'b'))
+}
+#Fisher Information Matrix
+fimSBPL=function(a,b){
+  FIM=numeric(4)
+  FIM[1]=-integral(function(x) I11(x,a,b)*dSBPL(I11(x,a,b),a,b), -8, 8, reltol = 1e-12, method = "Simpson")
+  FIM[2]=-integral(function(x) I12(x,a,b)*dSBPL(I12(x,a,b),a,b), -8, 8, reltol = 1e-12, method = "Simpson")
+  FIM[3]=FIM[2]
+  FIM[4]=-integral(function(x) I22(x,a,b)*dSBPL(I22(x,a,b),a,b), -8, 8, reltol = 1e-12, method = "Simpson")
+  return(FIM)
+}
